@@ -6,12 +6,13 @@ import time
 from glob import glob
 from collections import deque
 
-# motion detection is comparision between previous_frame && current_frame
+# motion detection is comparison between previous_frame && current_frame
 
 FRAMES_TO_PERSIST = 10 # Updates the previous frame in every 10th frame from the loop.
-MIN_SIZE_FOR_MOVEMENT = 1200 # higher is the number lesser is motion detection sensitivity. (window size)
+MIN_SIZE_FOR_MOVEMENT = 5000 # higher is the number lesser is motion detection sensitivity. (window size)
 MOVEMENT_DETECTED_PERSISTENCE = 20 # no. of frame count down before saving the video.
 
+SAVE_DEBUG_FRAMES = False
 
 def millis_to_str(millis):
     # Convert milliseconds to timestamp
@@ -58,7 +59,7 @@ def get_movement_segments(source: str, processed_files_path: str = './recordings
             print("CAPTURE ENDED")
             cv2.destroyAllWindows()
 
-            if out != None:
+            if out is not None:
                 out.release()
 
             cap.release()
@@ -117,24 +118,25 @@ def get_movement_segments(source: str, processed_files_path: str = './recordings
         # cv2.imshow("frame", np.hstack((frame_delta, frame)))
         cv2.imshow("frame", frame)
 
+        out_frame = frame if SAVE_DEBUG_FRAMES else original_frame
 
         # record video -----------
         if movement_persistent_counter>0:
             if not out: # for the very first frame
-                height, width, _ = original_frame.shape
+                height, width, _ = out_frame.shape
                 timestamp = millis_to_str(millis).replace(':', '-').replace('.', '-')
                 out = cv2.VideoWriter(f'{processed_files_path}/{source_basename}_{timestamp}_{int(time.time())}.mp4',
                                       fourcc, frame_rate, (width, height))
                 for f in prev_frames:
                     out.write(f)
-            out.write(original_frame)
+            out.write(out_frame)
 
         # Save each clip in separate video file
         elif movement_persistent_counter == 0 and out:
             out.release()
             out = None
 
-        prev_frames.append(original_frame)
+        prev_frames.append(out_frame)
 
         ch = cv2.waitKey(1)
         if ch & 0xFF == ord('q'):
@@ -147,7 +149,7 @@ def get_movement_segments(source: str, processed_files_path: str = './recordings
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-    if out != None:
+    if out is not None:
         out.release()
 
     cap.release()
@@ -155,11 +157,13 @@ def get_movement_segments(source: str, processed_files_path: str = './recordings
 
 
 def process_pipeline(source_path: str, destination_path: str = './recordings'):
+    os.makedirs(destination_path, exist_ok=True)
     if os.path.isdir(source_path):
         sources = glob(source_path + "/*.[mM][pP]4") # change to needed
+        sources.sort()
         print(f"start processing: {sources}")
-        for source in sources:
-            print(source)
+        for idx, source in enumerate(sources):
+            print(f"{idx + 1}/{len(sources)}: {source}")
             get_movement_segments(source, destination_path)
     elif os.path.isfile(source_path):
         print(f"start processing: {source_path}")
